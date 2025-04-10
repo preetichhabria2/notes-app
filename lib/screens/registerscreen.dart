@@ -25,19 +25,27 @@ class _RegisterscreenState extends State<Registerscreen> {
       setState(() => _isLoading = true);
 
       try {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+        final UserCredential userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+            );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created successfully!')),
-        );
+        final user = userCredential.user;
+        if (user != null && !user.emailVerified) {
+          await user.sendEmailVerification();
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const Loginscreen()),
-        );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Verification email sent. Please check your inbox.',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+
+        _showEmailVerificationDialog();
       } on FirebaseAuthException catch (e) {
         String message;
         switch (e.code) {
@@ -60,6 +68,32 @@ class _RegisterscreenState extends State<Registerscreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showEmailVerificationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Verify Your Email'),
+            content: const Text(
+              'We’ve sent a verification link to your email. Please verify it before logging in.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const Loginscreen()),
+                  );
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   void _showErrorDialog(String message) {
