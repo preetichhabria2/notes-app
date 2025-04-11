@@ -5,6 +5,9 @@ import 'package:lottie/lottie.dart'; // For Lottie animations
 import '../services/firestore_service.dart';
 import 'notes_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth to get current user
+import 'package:intl/intl.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz; // Import timezone package
 
 class AddNoteScreen extends StatefulWidget {
   const AddNoteScreen({super.key});
@@ -17,12 +20,59 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
   final titleController = TextEditingController();
   final contentController = TextEditingController();
   bool _isLoading = false; // To track loading state
+  List<String> _selectedTags = []; // To hold selected tags
+  final List<String> _availableTags = [
+    'Work',
+    'Personal',
+    'Study',
+    'Others',
+  ]; // Available tags
+  DateTime? _dueDate; // Selected due date
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  @override
+  void initState() {
+    super.initState();
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
 
   @override
   void dispose() {
     titleController.dispose();
     contentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scheduleNotification(
+    String title,
+    String body,
+    DateTime scheduledTime,
+  ) async {
+    final androidDetails = AndroidNotificationDetails(
+      'note_reminder_channel',
+      'Note Reminders',
+      channelDescription: 'Channel for note reminder notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    final notificationDetails = NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      0,
+      title,
+      body,
+      tz.TZDateTime.from(scheduledTime, tz.local).add(Duration(seconds: 1)),
+      notificationDetails,
+      androidAllowWhileIdle: true,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.dateAndTime,
+    );
   }
 
   @override
@@ -75,6 +125,81 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
               ),
               maxLines: 6,
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _dueDate == null
+                        ? 'No Due Date Selected'
+                        : 'Due: ${DateFormat.yMMMd().add_jm().format(_dueDate!)}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (pickedDate != null) {
+                      final pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (pickedTime != null) {
+                        setState(() {
+                          _dueDate = DateTime(
+                            pickedDate.year,
+                            pickedDate.month,
+                            pickedDate.day,
+                            pickedTime.hour,
+                            pickedTime.minute,
+                          );
+                        });
+                      }
+                    }
+                  },
+                  child: const Text('Pick Due Date'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<String>(
+              decoration: InputDecoration(
+                labelText: 'Tags',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey[100],
+              ),
+              value: _selectedTags.isEmpty ? null : _selectedTags[0],
+              items:
+                  _availableTags.map((tag) {
+                    return DropdownMenuItem<String>(
+                      value: tag,
+                      child: Text(tag),
+                    );
+                  }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  if (_selectedTags.contains(value)) {
+                    _selectedTags.remove(value);
+                  } else {
+                    _selectedTags.add(value!);
+                  }
+                });
+              },
+              hint: const Text('Select tags'),
+              isExpanded: true,
+              icon: const Icon(Icons.arrow_drop_down),
+            ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -94,7 +219,7 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                         height: 42,
                         width: 42,
                         child: Lottie.asset(
-                          'assets/animations/Loading_Animation.json', // Larger and corrected
+                          'assets/animations/Loading_Animation.json',
                           repeat: true,
                           fit: BoxFit.contain,
                         ),
@@ -142,15 +267,11 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                           _isLoading = true;
                         });
 
-                        // Get current user ID
                         final user = FirebaseAuth.instance.currentUser;
                         if (user == null) {
-                          // Handle the case if the user is not logged in
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                'Please log in to add a note.',
-                              ),
+                            const SnackBar(
+                              content: Text('Please log in to add a note.'),
                               backgroundColor: Colors.redAccent,
                             ),
                           );
@@ -161,7 +282,17 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                           title,
                           content,
                           user.uid,
+                          _selectedTags,
+                          _dueDate,
                         );
+
+                        if (_dueDate != null) {
+                          await _scheduleNotification(
+                            title,
+                            'Note due reminder',
+                            _dueDate!,
+                          );
+                        }
 
                         setState(() {
                           _isLoading = false;

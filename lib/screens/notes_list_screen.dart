@@ -29,6 +29,9 @@ class _NotesListScreenState extends State<NotesListScreen>
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
+    // Enable Firestore offline persistence
+    FirebaseFirestore.instance.settings = Settings(persistenceEnabled: true);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Your Notes'),
@@ -87,14 +90,16 @@ class _NotesListScreenState extends State<NotesListScreen>
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('notes')
-                      .where(
-                        'userId',
-                        isEqualTo: user?.uid,
-                      ) // Filter notes by user ID
-                      .snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('notes')
+                  .where(
+                    'userId',
+                    isEqualTo: user?.uid,
+                  ) // Filter notes by user ID
+                  .snapshots(
+                    includeMetadataChanges:
+                        true, // Ensures it listens for metadata changes (offline/online)
+                  ),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
