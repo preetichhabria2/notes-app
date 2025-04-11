@@ -87,7 +87,14 @@ class _NotesListScreenState extends State<NotesListScreen>
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: _service.getNotesStream(),
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('notes')
+                      .where(
+                        'userId',
+                        isEqualTo: user?.uid,
+                      ) // Filter notes by user ID
+                      .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());

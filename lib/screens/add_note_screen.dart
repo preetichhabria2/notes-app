@@ -4,6 +4,7 @@ import 'package:shimmer/shimmer.dart'; // For shimmer effect
 import 'package:lottie/lottie.dart'; // For Lottie animations
 import '../services/firestore_service.dart';
 import 'notes_list_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth to get current user
 
 class AddNoteScreen extends StatefulWidget {
   const AddNoteScreen({super.key});
@@ -141,7 +142,26 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                           _isLoading = true;
                         });
 
-                        await FirestoreService().addNote(title, content);
+                        // Get current user ID
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user == null) {
+                          // Handle the case if the user is not logged in
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                'Please log in to add a note.',
+                              ),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        await FirestoreService().addNote(
+                          title,
+                          content,
+                          user.uid,
+                        );
 
                         setState(() {
                           _isLoading = false;
