@@ -30,6 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  google_fonts: ^6.1.0  
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -39,7 +40,7 @@ dependencies:
   cloud_firestore: ^5.6.6
   firebase_storage: ^12.4.5
   fluttertoast: ^8.2.2
-
+  lottie: ^2.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,6 +68,7 @@ flutter:
   assets:
       - assets/images/signin.jpeg
       - assets/images/signup.jpg
+      - assets/animations/Animation - 1744363906144.json
   
 
   # An image asset can refer to one or more resolution-specific "variants", see
