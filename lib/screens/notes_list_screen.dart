@@ -55,8 +55,6 @@ class _NotesListScreenState extends State<NotesListScreen>
                 ),
               ),
             ),
-
-          // 🔍 Beautiful Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
             child: Material(
@@ -86,10 +84,7 @@ class _NotesListScreenState extends State<NotesListScreen>
               ),
             ),
           ),
-
           const SizedBox(height: 10),
-
-          // 📄 Notes List
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _service.getNotesStream(),
@@ -97,9 +92,7 @@ class _NotesListScreenState extends State<NotesListScreen>
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 final notes = snapshot.data!.docs;
-
                 final filteredNotes =
                     notes.where((note) {
                       final title = note['title'].toString().toLowerCase();
@@ -134,15 +127,98 @@ class _NotesListScreenState extends State<NotesListScreen>
                             MaterialPageRoute(
                               builder:
                                   (_) => NoteDetailScreen(
+                                    noteId: note.id,
                                     title: note['title'],
                                     content: note['content'],
+                                    isEditing: true, // Indicate we are editing
                                   ),
                             ),
                           );
                         },
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _service.deleteNote(note.id),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => NoteDetailScreen(
+                                          noteId: note.id,
+                                          title: note['title'],
+                                          content: note['content'],
+                                          isEditing: true,
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (BuildContext context) {
+                                    return AlertDialog(
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      title: const Text(
+                                        "Delete Note",
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      content: const Text(
+                                        "Are you sure you want to delete this note?",
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          child: const Text("Cancel"),
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                          },
+                                        ),
+                                        ElevatedButton.icon(
+                                          icon: const Icon(
+                                            Icons.delete_forever,
+                                            size: 18,
+                                          ),
+                                          label: const Text("Delete"),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent,
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          onPressed: () async {
+                                            Navigator.of(
+                                              context,
+                                            ).pop(); // Close dialog
+                                            await _service.deleteNote(
+                                              note.id,
+                                            ); // Delete note
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Note deleted successfully.",
+                                                ),
+                                                backgroundColor:
+                                                    Colors.redAccent,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
