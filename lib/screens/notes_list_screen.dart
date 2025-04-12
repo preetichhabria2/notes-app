@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:notes_app/screens/notedetailscreen.dart';
+import 'package:lottie/lottie.dart';
 import '../services/firestore_service.dart';
 import 'add_note_screen.dart';
 import 'Loginscreen.dart';
@@ -18,6 +19,8 @@ class _NotesListScreenState extends State<NotesListScreen>
   final FirestoreService _service = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _selectedTag;
+  List<String> _allTags = [];
 
   @override
   void dispose() {
@@ -29,8 +32,9 @@ class _NotesListScreenState extends State<NotesListScreen>
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    // Enable Firestore offline persistence
-    FirebaseFirestore.instance.settings = Settings(persistenceEnabled: true);
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -59,7 +63,7 @@ class _NotesListScreenState extends State<NotesListScreen>
               ),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Material(
               elevation: 2,
               borderRadius: BorderRadius.circular(16),
@@ -92,149 +96,226 @@ class _NotesListScreenState extends State<NotesListScreen>
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('notes')
-                  .where(
-                    'userId',
-                    isEqualTo: user?.uid,
-                  ) // Filter notes by user ID
-                  .snapshots(
-                    includeMetadataChanges:
-                        true, // Ensures it listens for metadata changes (offline/online)
-                  ),
+                  .where('userId', isEqualTo: user?.uid)
+                  .snapshots(includeMetadataChanges: true),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
+
                 final notes = snapshot.data!.docs;
+
+                final Set<String> tagSet = {};
+                for (var note in notes) {
+                  final tags = List<String>.from(note['tags'] ?? []);
+                  tagSet.addAll(tags);
+                }
+                _allTags = tagSet.toList();
+
                 final filteredNotes =
                     notes.where((note) {
                       final title = note['title'].toString().toLowerCase();
-                      return title.contains(_searchQuery);
+                      final matchesSearch = title.contains(_searchQuery);
+                      final tags = List<String>.from(note['tags'] ?? []);
+                      if (_selectedTag != null) {
+                        return matchesSearch && tags.contains(_selectedTag);
+                      } else {
+                        return matchesSearch;
+                      }
                     }).toList();
 
-                if (filteredNotes.isEmpty) {
-                  return const Center(child: Text("No matching notes found."));
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: filteredNotes.length,
-                  itemBuilder: (context, index) {
-                    final note = filteredNotes[index];
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 3,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        title: Text(note['title']),
-                        subtitle: Text(
-                          note['content'],
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => NoteDetailScreen(
-                                    noteId: note.id,
-                                    title: note['title'],
-                                    content: note['content'],
-                                    isEditing: true, // Indicate we are editing
-                                  ),
-                            ),
-                          );
-                        },
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                return Column(
+                  children: [
+                    if (_allTags.isNotEmpty)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (_) => NoteDetailScreen(
-                                          noteId: note.id,
-                                          title: note['title'],
-                                          content: note['content'],
-                                          isEditing: true,
-                                        ),
-                                  ),
-                                );
+                            ChoiceChip(
+                              label: const Text("All"),
+                              selected: _selectedTag == null,
+                              onSelected: (_) {
+                                setState(() => _selectedTag = null);
                               },
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      title: const Text(
-                                        "Delete Note",
-                                        style: TextStyle(
-                                          color: Colors.redAccent,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      content: const Text(
-                                        "Are you sure you want to delete this note?",
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          child: const Text("Cancel"),
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          },
-                                        ),
-                                        ElevatedButton.icon(
-                                          icon: const Icon(
-                                            Icons.delete_forever,
-                                            size: 18,
-                                          ),
-                                          label: const Text("Delete"),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.redAccent,
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          onPressed: () async {
-                                            Navigator.of(
-                                              context,
-                                            ).pop(); // Close dialog
-                                            await _service.deleteNote(
-                                              note.id,
-                                            ); // Delete note
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  "Note deleted successfully.",
-                                                ),
-                                                backgroundColor:
-                                                    Colors.redAccent,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    );
+                            const SizedBox(width: 8),
+                            ..._allTags.map((tag) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(tag),
+                                  selected: _selectedTag == tag,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      _selectedTag = selected ? tag : null;
+                                    });
                                   },
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            }).toList(),
                           ],
                         ),
                       ),
-                    );
-                  },
+                    const SizedBox(height: 10),
+                    if (filteredNotes.isEmpty)
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Lottie.asset(
+                                'assets/animations/empty.json',
+                                width: 200,
+                                height: 200,
+                                repeat: true,
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                "No notes yet",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: filteredNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = filteredNotes[index];
+                            return Card(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 3,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              child: ListTile(
+                                title: Text(note['title']),
+                                subtitle: Text(
+                                  note['content'],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) => NoteDetailScreen(
+                                            noteId: note.id,
+                                            title: note['title'],
+                                            content: note['content'],
+                                            isEditing: true,
+                                          ),
+                                    ),
+                                  );
+                                },
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        color: Colors.blue,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => NoteDetailScreen(
+                                                  noteId: note.id,
+                                                  title: note['title'],
+                                                  content: note['content'],
+                                                  isEditing: true,
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            return AlertDialog(
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                              ),
+                                              title: const Text(
+                                                "Delete Note",
+                                                style: TextStyle(
+                                                  color: Colors.redAccent,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              content: const Text(
+                                                "Are you sure you want to delete this note?",
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  child: const Text("Cancel"),
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                ),
+                                                ElevatedButton.icon(
+                                                  icon: const Icon(
+                                                    Icons.delete_forever,
+                                                    size: 18,
+                                                  ),
+                                                  label: const Text("Delete"),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.redAccent,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                      ),
+                                                  onPressed: () async {
+                                                    Navigator.of(context).pop();
+                                                    await _service.deleteNote(
+                                                      note.id,
+                                                    );
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          "Note deleted successfully.",
+                                                        ),
+                                                        backgroundColor:
+                                                            Colors.redAccent,
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -295,13 +376,11 @@ class _NotesListScreenState extends State<NotesListScreen>
         const begin = Offset(0.0, 1.0);
         const end = Offset.zero;
         const curve = Curves.easeInOut;
-
         final tween = Tween(
           begin: begin,
           end: end,
         ).chain(CurveTween(curve: curve));
         final offsetAnimation = animation.drive(tween);
-
         return SlideTransition(position: offsetAnimation, child: child);
       },
     );

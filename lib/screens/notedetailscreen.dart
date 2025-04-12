@@ -3,6 +3,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../services/firestore_service.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -27,7 +28,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final _contentController = TextEditingController();
   final FirestoreService _service = FirestoreService();
 
-  List<String> _selectedTags = [];
+  final List<String> _selectedTags = [];
   final List<String> _availableTags = [
     'Work',
     'Personal',
@@ -50,6 +51,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+    _loadExistingTags(); // ✅ Load existing tags
+  }
+
+  void _loadExistingTags() async {
+    final noteList = await _service.getNotes(""); // dummy call
+    final note = noteList.firstWhere(
+      (note) => note['id'] == widget.noteId,
+      orElse: () => {},
+    );
+    if (note.isNotEmpty && mounted) {
+      setState(() {
+        _selectedTags.addAll(List<String>.from(note['tags'] ?? []));
+        _dueDate = note['dueDate'];
+      });
+    }
   }
 
   @override
@@ -72,6 +89,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       if (_dueDate != null) {
         _scheduleNotification(_dueDate!, _titleController.text);
+        Fluttertoast.showToast(
+          msg: "Reminder set successfully",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.green,
+          textColor: Colors.white,
+          fontSize: 16.0,
+        );
       }
 
       showDialog(
@@ -161,7 +186,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       android: androidPlatformChannelSpecifics,
     );
 
-    // Convert DateTime to TZDateTime
     final tz.TZDateTime scheduledDate = tz.TZDateTime.from(dueDate, tz.local);
 
     await flutterLocalNotificationsPlugin.zonedSchedule(
@@ -175,6 +199,68 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
+  }
+
+  // Function to delete the note
+  void _deleteNote() async {
+    final confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Delete Note"),
+          content: const Text("Are you sure you want to delete this note?"),
+          actions: <Widget>[
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+            ),
+            TextButton(
+              child: const Text("Delete"),
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmDelete ?? false) {
+      await _service.deleteNote(widget.noteId);
+
+      // Show success message and go back to previous screen
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text(
+              "Note Deleted",
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            content: const Text(
+              "Your note has been deleted successfully.",
+              style: TextStyle(fontSize: 16),
+            ),
+            actions: [
+              TextButton(
+                child: const Text("OK", style: TextStyle(color: Colors.blue)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(
+                    context,
+                  ).pop(); // Navigate back to the previous screen
+                },
+              ),
+            ],
+          );
+        },
+      );
+    }
   }
 
   @override
@@ -295,6 +381,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   label: const Text("Save Changes"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 30),
+            // Add the Delete Note button here
+            if (widget.isEditing)
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _deleteNote,
+                  icon: const Icon(Icons.delete),
+                  label: const Text("Delete Note"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,

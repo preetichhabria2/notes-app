@@ -99,4 +99,6 @@ class FirestoreService {
 
     return notesRef.snapshots();
   }
+
+  addTag(String newTag) {}
 }

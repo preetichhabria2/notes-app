@@ -20,13 +20,18 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
   final titleController = TextEditingController();
   final contentController = TextEditingController();
   bool _isLoading = false; // To track loading state
-  List<String> _selectedTags = []; // To hold selected tags
+  final List<String> _selectedTags = []; // To hold selected tags
   final List<String> _availableTags = [
     'Work',
     'Personal',
     'Study',
     'Others',
   ]; // Available tags
+  final TextEditingController _newTagController = TextEditingController();
+  final TextEditingController _customOtherTagController =
+      TextEditingController(); // Controller for custom 'Others' tag
+  bool _isCreatingNewTag = false; // Flag to show new tag input
+  bool _isOtherSelected = false; // Flag to detect if "Others" is selected
   DateTime? _dueDate; // Selected due date
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -45,6 +50,8 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
   void dispose() {
     titleController.dispose();
     contentController.dispose();
+    _newTagController.dispose();
+    _customOtherTagController.dispose();
     super.dispose();
   }
 
@@ -73,6 +80,41 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
+  }
+
+  void _toggleTagCreation() {
+    setState(() {
+      _isCreatingNewTag = !_isCreatingNewTag;
+    });
+  }
+
+  void _addNewTag() {
+    final newTag = _newTagController.text.trim();
+
+    if (newTag.isNotEmpty && !_availableTags.contains(newTag)) {
+      setState(() {
+        _availableTags.add(newTag);
+        _selectedTags.add(newTag);
+        _newTagController.clear();
+        _isCreatingNewTag = false;
+      });
+    } else if (newTag.isEmpty) {
+      // Show error message if the tag is empty
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tag cannot be empty!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } else {
+      // Show error message if the tag already exists
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tag already exists!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   @override
@@ -179,7 +221,7 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                 filled: true,
                 fillColor: Colors.grey[100],
               ),
-              value: _selectedTags.isEmpty ? null : _selectedTags[0],
+              value: null,
               items:
                   _availableTags.map((tag) {
                     return DropdownMenuItem<String>(
@@ -188,11 +230,15 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
                     );
                   }).toList(),
               onChanged: (value) {
+                if (value == null) return;
                 setState(() {
-                  if (_selectedTags.contains(value)) {
-                    _selectedTags.remove(value);
+                  if (value == 'Others') {
+                    _isOtherSelected = true;
                   } else {
-                    _selectedTags.add(value!);
+                    _isOtherSelected = false;
+                    if (!_selectedTags.contains(value)) {
+                      _selectedTags.add(value);
+                    }
                   }
                 });
               },
@@ -200,7 +246,56 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
               isExpanded: true,
               icon: const Icon(Icons.arrow_drop_down),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            if (_isOtherSelected)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _customOtherTagController,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter custom tag',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.check),
+                    onPressed: () {
+                      final customTag = _customOtherTagController.text.trim();
+                      if (customTag.isNotEmpty &&
+                          !_availableTags.contains(customTag)) {
+                        setState(() {
+                          _availableTags.add(customTag);
+                          _selectedTags.add(customTag);
+                          _customOtherTagController.clear();
+                          _isOtherSelected = false;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            const SizedBox(height: 16),
+            if (_isCreatingNewTag)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _newTagController,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter new tag',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.check),
+                    onPressed: _addNewTag,
+                  ),
+                ],
+              ),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
